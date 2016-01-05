@@ -1,0 +1,142 @@
+diff -ruN -x '*.bat' -x '*.sh' lua-5.1.5/src/Makefile lua-5.1.5-compat/src/Makefile
+--- lua-5.1.5/src/Makefile	2016-01-05 21:50:29.000000000 +0800
++++ lua-5.1.5-compat/src/Makefile	2015-05-12 16:44:05.000000000 +0800
+@@ -8,7 +8,7 @@
+ PLAT= none
+ 
+ CC= gcc
+-CFLAGS= -O2 -Wall $(MYCFLAGS)
++CFLAGS= -O2 -Wall $(MYCFLAGS) $(BCFLAG)
+ AR= ar rcu
+ RANLIB= ranlib
+ RM= rm -f
+@@ -18,6 +18,12 @@
+ MYLDFLAGS=
+ MYLIBS=
+ 
++# ++ lua 32 bit ============= {{
++BCFLAG = 
++#
++# BCFLAG = -DLUA_ENABLE_32BIT
++# ++ lua 32 bit ============= }}
++
+ # == END OF USER SETTINGS. NO NEED TO CHANGE ANYTHING BELOW THIS LINE =========
+ 
+ PLATS= aix ansi bsd freebsd generic linux macosx mingw posix solaris
+diff -ruN -x '*.bat' -x '*.sh' lua-5.1.5/src/ldump.c lua-5.1.5-compat/src/ldump.c
+--- lua-5.1.5/src/ldump.c	2016-01-05 21:50:29.000000000 +0800
++++ lua-5.1.5-compat/src/ldump.c	2015-05-12 15:17:26.000000000 +0800
+@@ -44,7 +44,8 @@
+ 
+ static void DumpInt(int x, DumpState* D)
+ {
+- DumpVar(x,D);
++ bcint i = x;
++ DumpVar(i,D);
+ }
+ 
+ static void DumpNumber(lua_Number x, DumpState* D)
+@@ -62,12 +63,12 @@
+ {
+  if (s==NULL || getstr(s)==NULL)
+  {
+-  size_t size=0;
++  bcsize_t size=0;
+   DumpVar(size,D);
+  }
+  else
+  {
+-  size_t size=s->tsv.len+1;		/* include trailing '\0' */
++  bcsize_t size=s->tsv.len+1;		/* include trailing '\0' */
+   DumpVar(size,D);
+   DumpBlock(getstr(s),size,D);
+  }
+diff -ruN -x '*.bat' -x '*.sh' lua-5.1.5/src/llex.c lua-5.1.5-compat/src/llex.c
+--- lua-5.1.5/src/llex.c	2016-01-05 21:50:29.000000000 +0800
++++ lua-5.1.5-compat/src/llex.c	2015-05-12 15:23:23.000000000 +0800
+@@ -178,9 +178,10 @@
+ 
+ static void trydecpoint (LexState *ls, SemInfo *seminfo) {
+   /* format error: try to update decimal point separator */
+-  struct lconv *cv = localeconv();
++  /*struct lconv *cv = localeconv();*/
+   char old = ls->decpoint;
+-  ls->decpoint = (cv ? cv->decimal_point[0] : '.');
++  /* ls->decpoint = (cv ? cv->decimal_point[0] : '.');*/
++  ls->decpoint = '.';/*(cv ? cv->decimal_point[0] : '.');*/
+   buffreplace(ls, old, ls->decpoint);  /* try updated decimal separator */
+   if (!luaO_str2d(luaZ_buffer(ls->buff), &seminfo->r)) {
+     /* format error with correct decimal point: no more options */
+diff -ruN -x '*.bat' -x '*.sh' lua-5.1.5/src/lstrlib.c lua-5.1.5-compat/src/lstrlib.c
+--- lua-5.1.5/src/lstrlib.c	2016-01-05 21:50:29.000000000 +0800
++++ lua-5.1.5-compat/src/lstrlib.c	2015-05-12 15:48:33.000000000 +0800
+@@ -19,6 +19,7 @@
+ #include "lauxlib.h"
+ #include "lualib.h"
+ 
++/* #define IS_STRICT_FORMAT 1*/
+ 
+ /* macro to `unsign' a character */
+ #define uchar(c)        ((unsigned char)(c))
+@@ -798,7 +799,11 @@
+         }
+         case 's': {
+           size_t l;
++#ifdef IS_STRICT_FORMAT
+           const char *s = luaL_checklstring(L, arg, &l);
++#else
++          const char *s = lua_tolstring(L, arg, &l);
++#endif
+           if (!strchr(form, '.') && l >= 100) {
+             /* no precision and string is too long to be formatted;
+                keep original string */
+diff -ruN -x '*.bat' -x '*.sh' lua-5.1.5/src/luaconf.h lua-5.1.5-compat/src/luaconf.h
+--- lua-5.1.5/src/luaconf.h	2016-01-05 21:50:29.000000000 +0800
++++ lua-5.1.5-compat/src/luaconf.h	2015-05-12 15:20:36.000000000 +0800
+@@ -11,6 +11,14 @@
+ #include <limits.h>
+ #include <stddef.h>
+ 
++#ifdef LUA_ENABLE_32BIT
++#include <stdint.h>
++typedef int32_t bcint;
++typedef uint32_t bcsize_t;
++#else
++typedef int bcint;
++typedef size_t bcsize_t;
++#endif
+ 
+ /*
+ ** ==================================================================
+diff -ruN -x '*.bat' -x '*.sh' lua-5.1.5/src/lundump.c lua-5.1.5-compat/src/lundump.c
+--- lua-5.1.5/src/lundump.c	2016-01-05 21:50:29.000000000 +0800
++++ lua-5.1.5-compat/src/lundump.c	2015-05-12 15:19:42.000000000 +0800
+@@ -60,7 +60,7 @@
+ 
+ static int LoadInt(LoadState* S)
+ {
+- int x;
++ bcint x;
+  LoadVar(S,x);
+  IF (x<0, "bad integer");
+  return x;
+@@ -75,7 +75,7 @@
+ 
+ static TString* LoadString(LoadState* S)
+ {
+- size_t size;
++ bcsize_t size;
+  LoadVar(S,size);
+  if (size==0)
+   return NULL;
+@@ -219,8 +219,8 @@
+  *h++=(char)LUAC_VERSION;
+  *h++=(char)LUAC_FORMAT;
+  *h++=(char)*(char*)&x;				/* endianness */
+- *h++=(char)sizeof(int);
+- *h++=(char)sizeof(size_t);
++ *h++=(char)sizeof(bcint);
++ *h++=(char)sizeof(bcsize_t);
+  *h++=(char)sizeof(Instruction);
+  *h++=(char)sizeof(lua_Number);
+  *h++=(char)(((lua_Number)0.5)==0);		/* is lua_Number integral? */
