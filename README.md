@@ -2,7 +2,7 @@
 
 makes lua(64bit) work with lua bytecode(32bit)
 
-lua bytecode files which create by this version, are the same with [lua-PUB.Rio](http://www.lua.org/)(32bit)
+lua bytecode files which create by this version, are the same with [lua-PUC.Rio](http://www.lua.org/)(32bit)
 
 based on lua-5.1.5
 
